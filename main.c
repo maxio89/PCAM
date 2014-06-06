@@ -20,8 +20,8 @@
 #define MIN 0.0
 #define MAX 1.0
 #define WARM_SIZE 1
-#define WARM_FACTOR 2
-#define MAX_ITER 100
+#define TAG 123
+#define MAX_ITER 200
 
 double h, dt, pow_h;
 int N, M, zeroCounter;
@@ -102,12 +102,46 @@ double** makeCopy(double** tab) {
     return copy;
 }
 
-void run(double** tab, int rank) {
-    int i, n, m;
+double* getVector(double** tab, int col) {
+    int m;
+    double *vector;
+    vector = calloc(M, sizeof (double));
+    for (m = 0; m < M; m++) {
+        vector[m] = tab[m][col];
+    }
+    return vector;
+}
 
-    double** prevTab = makeCopy(tab);
+void run(double** tab, int rank, MPI_Comm comm_cart) {
+
+    double** prevTab = makeCopy(tab), *leftVector, *rightVector;
+
+    int i, n, m, right, left;
+
+    MPI_Status recv_status;
+    MPI_Request request;
+
+    MPI_Cart_shift(comm_cart, 0, 1, &left, &right);
 
     for (i = 0; i < MAX_ITER; i++) {
+
+        int sizeOf = sizeof (double) * M;
+        leftVector = getVector(tab, 0);
+        rightVector = getVector(tab, M);
+
+        MPI_Isend(rightVector, sizeOf, MPI_DOUBLE, right, TAG, comm_cart, &request);
+
+        MPI_Recv(&rightVector, sizeOf, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
+
+        MPI_Wait(&request, &recv_status);
+
+        MPI_Isend(leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &request);
+
+        MPI_Recv(&leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &recv_status);
+
+        MPI_Wait(&request, &recv_status);
+        
+//        printf();
 
         for (n = 0; n < N; n++) {
             for (m = 0; m < M; m++) {
@@ -120,9 +154,13 @@ void run(double** tab, int rank) {
                 }
                 if (m < M - 1) {
                     right = prevTab[n][m + 1];
+                } else {
+                    right = rightVector[m];
                 }
                 if (m > 0) {
                     left = prevTab[n][m - 1];
+                } else {
+                    left = leftVector[m];
                 }
                 tab[n][m] = calculateValue(left, right, top, bottom, prevTab[n][m]);
                 prevTab[n][m] = tab[n][m];
@@ -131,11 +169,10 @@ void run(double** tab, int rank) {
         }
         //        printf("i=%d\n", i);
         //        if (zeroCounter == N * M) {
-        //            break;
+                    break;
         //        }
     }
     printfTable(tab, rank);
-
 
 }
 
@@ -175,13 +212,21 @@ int main(int argc, char** argv) {
     pow_h = h*h;
     tab = initializeTable(tab, my_rank, size);
 
+    int dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
+    MPI_Comm comm_cart;
 
-    //    printfTable(tab, my_rank);
+    MPI_Cart_create(MPI_COMM_WORLD, ndims, dims, periods, reorder, &comm_cart);
 
-    run(tab, my_rank);
+    //    if(my_rank == 0) {
+//    printfTable(tab, my_rank);
+    //    }
+
+        run(tab, my_rank, comm_cart);
 
     //    printf("my rank: %d", my_rank);
 
+
+    printf("\nFinished!\n");
     MPI_Finalize();
 
     return (EXIT_SUCCESS);
