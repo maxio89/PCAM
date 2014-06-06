@@ -1,8 +1,8 @@
 /* 
  * File:   main.c
- * Author: piotrek
+ * Author: Piotr Kozlowski
  *
- * PCAM implementation
+ * PCAM implementation using MPI
  * 
  */
 
@@ -16,18 +16,15 @@
 #define DEFAULT_H 0.1
 #define DEFAULT_DT 0.001
 
-#define NELEMS(x)  (sizeof(x) / sizeof(x[0]))
 #define MIN 0.0
 #define MAX 1.0
-#define WARM_SIZE 1
 #define TAG 123
 #define MAX_ITER 200
 
 double h, dt, pow_h;
-int N, M, zeroCounter;
+int N, M;
 
 double initializeValue(int n, int m, int N, int M, int my_rank, int size) {
-
     if (my_rank == 0 && (m == 0 || (n == N - 1 || n == 0))) {
         return 0.0;
     } else if (my_rank == size - 1 && (m == M - 1 || (n == N - 1 || n == 0))) {
@@ -43,22 +40,20 @@ double** initializeTable(double** tab, int my_rank, int size) {
 
     tab = calloc(N, sizeof (double*));
 
-    int n;
+    int n, m;
     for (n = 0; n < N; n++) {
         tab[n] = calloc(M, sizeof (double));
     }
-    int m;
+
     for (n = 0; n < N; n++) {
         for (m = 0; m < M; m++) {
             tab[n][m] = initializeValue(n, m, N, M, my_rank, size);
         }
     }
-
     return tab;
 }
 
 void printfTable(double** tab, int rank) {
-
     printf("\ntab%d start:\n", rank);
     int n, m;
     for (n = 0; n < N; n++) {
@@ -79,7 +74,6 @@ double calculateValue(double left, double right, double top, double bottom, doub
     if (value > 0) {
         return value;
     } else {
-        zeroCounter++;
         return 0;
     }
 }
@@ -87,18 +81,17 @@ double calculateValue(double left, double right, double top, double bottom, doub
 double** makeCopy(double** tab) {
 
     double** copy = calloc(N, sizeof (double*));
-
-    int n;
+    int n, m;
+    
     for (n = 0; n < N; n++) {
         copy[n] = calloc(M, sizeof (double));
     }
-    int m;
+
     for (n = 0; n < N; n++) {
         for (m = 0; m < M; m++) {
             copy[n][m] = tab[n][m];
         }
     }
-
     return copy;
 }
 
@@ -115,7 +108,6 @@ double* getVector(double** tab, int col) {
 void run(double** tab, int rank, MPI_Comm comm_cart) {
 
     double** prevTab = makeCopy(tab), *leftVector, *rightVector;
-
     int i, n, m, right, left;
 
     MPI_Status recv_status;
@@ -124,24 +116,19 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
     MPI_Cart_shift(comm_cart, 0, 1, &left, &right);
 
     for (i = 0; i < MAX_ITER; i++) {
-
+        
         int sizeOf = sizeof (double) * M;
         leftVector = getVector(tab, 0);
         rightVector = getVector(tab, M);
 
         MPI_Isend(rightVector, sizeOf, MPI_DOUBLE, right, TAG, comm_cart, &request);
-
         MPI_Recv(&rightVector, sizeOf, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
-
         MPI_Wait(&request, &recv_status);
 
         MPI_Isend(leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &request);
-
         MPI_Recv(&leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &recv_status);
-
         MPI_Wait(&request, &recv_status);
         
-//        printf();
 
         for (n = 0; n < N; n++) {
             for (m = 0; m < M; m++) {
@@ -168,12 +155,9 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
 
         }
         //        printf("i=%d\n", i);
-        //        if (zeroCounter == N * M) {
                     break;
-        //        }
     }
     printfTable(tab, rank);
-
 }
 
 /*
@@ -189,16 +173,7 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
  */
 int main(int argc, char** argv) {
 
-    double** tab;
-
-    int ierror, rank, my_rank, size;
-
-    MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    if (argc < 5) {
-        //        printf("Initialized default values. \n");
+    if (argc < 7) {
         N = DEFAULT_N;
         M = DEFAULT_M;
         h = DEFAULT_H;
@@ -209,22 +184,23 @@ int main(int argc, char** argv) {
         h = atof(argv[3]);
         dt = atof(argv[4]);
     }
+    
     pow_h = h*h;
-    tab = initializeTable(tab, my_rank, size);
 
-    int dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
+    int ierror, rank, my_rank, size, dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
+
     MPI_Comm comm_cart;
 
+    MPI_Init(&argc, &argv);
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
     MPI_Cart_create(MPI_COMM_WORLD, ndims, dims, periods, reorder, &comm_cart);
 
-    //    if(my_rank == 0) {
-//    printfTable(tab, my_rank);
-    //    }
-
-        run(tab, my_rank, comm_cart);
-
-    //    printf("my rank: %d", my_rank);
-
+    double** tab = initializeTable(tab, my_rank, size);
+    
+    printfTable(tab, my_rank);
+   
+    run(tab, my_rank, comm_cart);
 
     printf("\nFinished!\n");
     MPI_Finalize();
