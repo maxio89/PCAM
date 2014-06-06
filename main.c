@@ -108,6 +108,7 @@ void run(double** tab, int rank) {
     double** prevTab = makeCopy(tab);
 
     for (i = 0; i < MAX_ITER; i++) {
+
         for (n = 0; n < N; n++) {
             for (m = 0; m < M; m++) {
                 double left = 0, right = 0, top = 0, bottom = 0;
@@ -129,9 +130,9 @@ void run(double** tab, int rank) {
 
         }
         //        printf("i=%d\n", i);
-        if (zeroCounter == N * M) {
-            break;
-        }
+        //        if (zeroCounter == N * M) {
+        //            break;
+        //        }
     }
     printfTable(tab, rank);
 
@@ -150,10 +151,6 @@ void run(double** tab, int rank) {
  * 
  */
 int main(int argc, char** argv) {
-
-    //    MPI_Status send_status;
-    //    MPI_Status recv_status;
-    //    MPI_Request request;
 
     double** tab;
 
@@ -178,11 +175,12 @@ int main(int argc, char** argv) {
     pow_h = h*h;
     tab = initializeTable(tab, my_rank, size);
 
+
     //    printfTable(tab, my_rank);
 
     run(tab, my_rank);
 
-//    printf("my rank: %d", my_rank);
+    //    printf("my rank: %d", my_rank);
 
     MPI_Finalize();
 
