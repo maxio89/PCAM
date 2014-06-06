@@ -82,7 +82,7 @@ double** makeCopy(double** tab) {
 
     double** copy = calloc(N, sizeof (double*));
     int n, m;
-    
+
     for (n = 0; n < N; n++) {
         copy[n] = calloc(M, sizeof (double));
     }
@@ -116,7 +116,7 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
     MPI_Cart_shift(comm_cart, 0, 1, &left, &right);
 
     for (i = 0; i < MAX_ITER; i++) {
-        
+
         int sizeOf = sizeof (double) * M;
         leftVector = getVector(tab, 0);
         rightVector = getVector(tab, M);
@@ -128,7 +128,7 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
         MPI_Isend(leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &request);
         MPI_Recv(&leftVector, sizeOf, MPI_DOUBLE, left, TAG, comm_cart, &recv_status);
         MPI_Wait(&request, &recv_status);
-        
+
 
         for (n = 0; n < N; n++) {
             for (m = 0; m < M; m++) {
@@ -155,7 +155,7 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
 
         }
         //        printf("i=%d\n", i);
-                    break;
+//        break;
     }
     printfTable(tab, rank);
 }
@@ -184,22 +184,24 @@ int main(int argc, char** argv) {
         h = atof(argv[3]);
         dt = atof(argv[4]);
     }
-    
+
     pow_h = h*h;
 
-    int ierror, rank, my_rank, size, dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
-
-    MPI_Comm comm_cart;
-
+    int size;
+    
     MPI_Init(&argc, &argv);
-    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
+    
+    int ierror, rank, my_rank, dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
+    MPI_Comm comm_cart;
+    
+    MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Cart_create(MPI_COMM_WORLD, ndims, dims, periods, reorder, &comm_cart);
 
     double** tab = initializeTable(tab, my_rank, size);
-    
+
     printfTable(tab, my_rank);
-   
+
     run(tab, my_rank, comm_cart);
 
     printf("\nFinished!\n");
