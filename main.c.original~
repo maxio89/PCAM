@@ -21,7 +21,7 @@
 #define TAG 123
 #define MAX_ITER 200
 
-double h, dt, pow_h, elapsed, start, end;
+double h, dt, pow_h;
 int N, M;
 
 double initializeValue(int n, int m, int N, int M, int my_rank, int size) {
@@ -63,26 +63,6 @@ void printfTable(double** tab, int rank) {
         printf("\n");
     }
     printf("tab%d end\n", rank);
-}
-
-void saveTable(double **table, int rank) {
-    char fileName[40];
-    sprintf(fileName, "result%d.txt", rank);
-    FILE *file = fopen(fileName, "a");
-    if (file == NULL) {
-        printf("Error opening file!\n");
-        exit(1);
-    }
-
-    int n, m;
-    for (n = 0; n < N; n++) {
-        for (m = 0; m < M; m++) {
-            fprintf(file, "%1.3f\t", table[n][m]);
-        }
-        fprintf(file, "\n");
-    }
-    fprintf(file, "\n\n");
-    fclose(file);
 }
 
 double drand(double low, double high) {
@@ -175,10 +155,9 @@ void run(double** tab, int rank, MPI_Comm comm_cart) {
 
         }
         //        printf("i=%d\n", i);
-        //        break;
+//        break;
     }
     printfTable(tab, rank);
-    saveTable(tab, rank);
 }
 
 /*
@@ -209,15 +188,13 @@ int main(int argc, char** argv) {
     pow_h = h*h;
 
     int size;
-
-    start = MPI_Wtime();
-
+    
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
-
+    
     int ierror, rank, my_rank, dims[2] = {1, size}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
     MPI_Comm comm_cart;
-
+    
     MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
     MPI_Cart_create(MPI_COMM_WORLD, ndims, dims, periods, reorder, &comm_cart);
 
@@ -229,10 +206,6 @@ int main(int argc, char** argv) {
 
     printf("\nFinished!\n");
     MPI_Finalize();
-
-    end = MPI_Wtime();
-    elapsed = end - start;
-    printf("\n\nRun time: %f\n", elapsed);
 
     return (EXIT_SUCCESS);
 }
