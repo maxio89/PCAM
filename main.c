@@ -9,7 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <openmpi-x86_64/mpi.h>
+#include <mpi.h>
+//#include <openmpi-x86_64/mpi.h>
 #include <unistd.h>
 
 #define DEFAULT_ROW 10
@@ -35,9 +36,6 @@ double initializeValue(int row, int col, int N, int M, int my_rank, int size) {
     } else {
         return 1.0;
     }
-    //    char *a;
-    //    sprintf(a, "%d%d", col, row);
-    //    return atof(a);
 }
 
 double** initializeTable(double** tab, int my_rank, int size) {
@@ -159,98 +157,110 @@ double** makeCopy(double** tab) {
 
 void run(double** tab, int rank, MPI_Comm comm_cart) {
 
-    double **prevTab = makeCopy(tab), rightVector[COL], leftVector[ROW];
+    double **prevTab = makeCopy(tab), rightVector[ROW], leftVector[ROW], receiving_avg=0.0, sending_avg=0.0, calculating_avg=0.0;
     int i, row, col, right, left, direction = 0, disp = 1;
 
     MPI_Status recv_status, recv_status2;
-    MPI_Request request, request2;
+    MPI_Request request, request2, recv_request, recv_request2;
 
     MPI_Cart_shift(comm_cart, direction, disp, &left, &right);
-
-    saveTable(tab, rank, 0, 1);
+    //printf("[%d] left %d right %d\n", rank, left, right);
+    //    saveTable(tab, rank, 0, 1);
     for (i = 0; i < maxIter; i++) {
-        saveVectors(tab[0], tab[COL - 1], rank);
-        //            if (rank == 0) {printfVector(rightVector, rank);printfVector(leftVector, rank);}
-        if (right >= 0 && right <= size) {
-            MPI_Isend(tab[COL - 1], ROW, MPI_DOUBLE, right, TAG, comm_cart, &request);
-            MPI_Recv(leftVector, ROW, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
-        }
+        //        saveVectors(tab[0], tab[COL - 1], rank);
+        double a = 0.0, b, c = 0.0, d, sending_start, receiving_start, calculating_start, sending_end, receiving_end, calculating_end;
+        
+        
+        calculating_start=MPI_Wtime();
+        //        if (right >= 0 && right <= size) {
+        //            MPI_Isend(&a, 1, MPI_DOUBLE, right, TAG, comm_cart, &request);
+        //            MPI_Recv(&b, 1, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
+        //        }
+        //
+        //        if (left >= 0 && left <= size) {
+        //            MPI_Isend(&c, 1, MPI_DOUBLE, left, TAG, comm_cart, &request);
+        //            MPI_Recv(&d, 1, MPI_DOUBLE, left, TAG, comm_cart, &recv_status);
+        //        }
 
-        if (left >= 0 && left <= size) {
-            MPI_Isend(tab[0], ROW, MPI_DOUBLE, left, TAG, comm_cart, &request);
-            MPI_Recv(rightVector, ROW, MPI_DOUBLE, left, TAG, comm_cart, &recv_status);
-        }
-
-        saveVectors(leftVector, rightVector, rank);
+        //        saveVectors(leftVector, rightVector, rank);
         for (row = 0; row < ROW; row++) {
             for (col = 0; col < COL; col++) {
                 double left = 0, right = 0, top = 0, bottom = 0;
                 if (row > 0) {
                     top = prevTab[col][row - 1];
-                    //                                        if (rank == 0) {
-                    //                                            printf("\n0-");
-                    //                                        }
                 }
                 if (row < ROW - 1) {
                     bottom = prevTab[col][row + 1];
-                    //                                        if (rank == 0) {
-                    //                                            printf("1-");
-                    //                                        }
                 }
                 if (col < COL - 1) {
                     right = prevTab[col + 1][row];
-                    //                                        if (rank == 0) {
-                    //                                            printf("2-");
-                    //                                        }
                 } else if (col == COL - 1 && rank < size - 1) {
                     right = leftVector[row];
-                    //                                        if (rank == 0) {
-                    //                                            printf("3-");
-                    //                                        }
                 }
                 if (col > 0) {
                     left = prevTab[col - 1][row];
-                    //                                        if (rank == 0) {
-                    //                                            printf("4-");
-                    //                                        }
                 } else if (col == 0 && rank > 0) {
                     left = rightVector[row];
-                    //                                        if (rank == 0) {
-                    //                                            printf("5\n");
-                    //                                        }
                 }
-                //                if (rank == 1) {
-                //                    printf("\nrank:%d i:%d - [%d][%d], \n   [%1.3f]\n[%1.3f]  [%1.3f]\n   [%1.3f]\n", rank, i, col, row, top, left, right, bottom);
-                //                }
                 tab[col][row] = calculateValue(left, right, top, bottom, prevTab[col][row]);
-
             }
         }
-        //        for (row = 0; row < ROW; row++) {
-        //            for (col = 0; col < COL; col++) {
-        //                prevTab[col][row] = tab[col][row];
-        //            }
-        //        }
-        *prevTab = *tab;
-        saveTable(tab, rank, i + 1, 0);
-        //        break;
         //        printf("i:%d\n", i);
+        *prevTab = *tab;
+        calculating_end = MPI_Wtime();
+        
+        sending_start = MPI_Wtime();
+        if (right >= 0 && right <= size) {
+            MPI_Isend(&tab[COL - 1], ROW, MPI_DOUBLE, right, TAG, comm_cart, &request);
+            //            MPI_Irecv(leftVector, ROW, MPI_DOUBLE, right, TAG, comm_cart, &recv_request);
+            //            MPI_Recv(leftVector, ROW, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
+            //            printf("entered 1 %d\n", rank);
+        }
+
+        if (left >= 0 && left <= size) {
+            MPI_Isend(&tab[0], ROW, MPI_DOUBLE, left, TAG, comm_cart, &request2);
+            //            printfVector(tab[0],rank);
+            //            MPI_Irecv(rightVector, ROW, MPI_DOUBLE, left, TAG, comm_cart, &recv_request2);
+            //            MPI_Recv(rightVector, ROW, MPI_DOUBLE, left, TAG, comm_cart, &recv_status2);
+            //            printf("entered 2 %d\n", rank);
+        }
+        sending_end = MPI_Wtime();
+        receiving_start = sending_end;
+        if (right >= 0 && right <= size) {
+
+            MPI_Recv(leftVector, ROW, MPI_DOUBLE, right, TAG, comm_cart, &recv_status);
+            //            MPI_Wait(&recv_request, &recv_status);
+        }
+
+        if (left >= 0 && left <= size) {
+
+            MPI_Recv(rightVector, ROW, MPI_DOUBLE, left, TAG, comm_cart, &recv_status2);
+
+        }
+        receiving_end = MPI_Wtime(); 
+        
+        receiving_avg=receiving_avg+receiving_end-receiving_start;
+        sending_avg=sending_avg+sending_end-sending_start;
+        calculating_avg=calculating_avg+calculating_end-calculating_start;
+//        printf("i:%d, row:%d, col:%d\n", i, row, col);
+        printf("[%d] sending:%1.6fs, receiving:%1.6fs, calculating:%1.6fs \n", rank, sending_end-sending_start, receiving_end-receiving_start, calculating_end-calculating_start);
+        //        MPI_Wait(&recv_request, &recv_status);
+        //        MPI_Wait(&recv_request2, &recv_status2);
     }
-    //    if (rank == 0) {printfTable(tab, rank);}
-
-    //    if (rank == 0) {printfVector(rightVector, rank);printfVector(leftVector, rank);}
-
+    
+    printf("[%d] sending_avg:%1.6fs, receiving_avg:%1.6fs, calculating_avg:%1.6fs \n", rank, sending_avg/i, receiving_avg/i, calculating_avg/i);
+    //    saveTable(tab, rank, i + 1, 0);
 }
 
 /*
  * Usage:
- *  ./pcam 100 100 0.001 0.01 500
+ * mpirun -n 4 ./pcam 100 100 0.1 0.001 500
  * 
  * Above arguments will initialize variables like below:
  * row = 100
  * col = 100
- * h = 0.001
- * dt = 0.01
+ * h = 0.1
+ * dt = 0.001
  * maxIter = 500
  * 
  */
@@ -259,23 +269,24 @@ int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (argc < 8) {
+    if (argc < 6) {
         ROW = DEFAULT_ROW;
         COL = DEFAULT_COL / size;
         h = DEFAULT_H;
         dt = DEFAULT_DT;
         maxIter = DEFAULT_MAX_ITER;
     } else {
-        ROW = atof(argv[2]);
-        COL = atof(argv[1]) / size;
+        ROW = atoi(argv[1]);
+        COL = atoi(argv[2]) / size;
         h = atof(argv[3]);
         dt = atof(argv[4]);
-        maxIter = atof(argv[4]);
+        maxIter = atoi(argv[5]);
     }
-
+    printf("ROW:%d, COL:%d, h:%1.3f, dt:%1.3f, maxIter:%d, argc:%d\n", ROW, COL, h, dt, maxIter, argc);
+    //    
     pow_h = h*h;
     start = MPI_Wtime();
-
+    //
     int ierror, my_rank, dims[2] = {size, 1}, periods[2] = {0, 0}, ndims = 2, reorder = 0;
     MPI_Comm comm_cart;
 
@@ -286,13 +297,13 @@ int main(int argc, char** argv) {
 
     run(tab, my_rank, comm_cart);
 
-    printfTable(tab, my_rank);
-    
-    MPI_Finalize();
+    //    printfTable(tab, my_rank);
 
     end = MPI_Wtime();
     elapsed = end - start;
-    printf("\n\n[%d] Elapsed time: %f\n", my_rank, elapsed);
+    printf("\n[%d] Elapsed time: %f\n", my_rank, elapsed);
+
+    MPI_Finalize();
 
     return (EXIT_SUCCESS);
 }
